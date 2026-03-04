@@ -1,22 +1,34 @@
-"""ChromaDB vector store with Ollama embeddings."""
+"""ChromaDB vector store with Ollama or OpenAI embeddings."""
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from config import CHROMA_DIR, OLLAMA_BASE_URL, OLLAMA_EMBEDDING_MODEL
+from config import CHROMA_DIR, get_openai_api_key, get_ollama_base_url, get_ollama_embedding_model
 
 
 def get_embeddings():
-    """Get Ollama embeddings function."""
+    """Get embeddings: OpenAI if key set, else Ollama, else fallback."""
+    api_key = get_openai_api_key()
+    if api_key:
+        try:
+            from langchain_openai import OpenAIEmbeddings
+
+            return OpenAIEmbeddings(openai_api_key=api_key, model="text-embedding-3-small")
+        except ImportError:
+            pass
+
     try:
         from langchain_community.embeddings import OllamaEmbeddings
+
         return OllamaEmbeddings(
-            base_url=OLLAMA_BASE_URL,
-            model=OLLAMA_EMBEDDING_MODEL,
+            base_url=get_ollama_base_url(),
+            model=get_ollama_embedding_model(),
         )
-    except ImportError:
-        return _fallback_embeddings()
+    except Exception:
+        pass
+
+    return _fallback_embeddings()
 
 
 def _fallback_embeddings():

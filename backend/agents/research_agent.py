@@ -39,7 +39,9 @@ def research_agent(state: AnalysisState) -> AnalysisState:
     prop = state["property_input"]
     search_query = prop.property_address
 
-    use_mock = os.getenv("MOCK_SCRAPING", "").lower() in ("1", "true", "yes")
+    from config import use_mock_scraping
+
+    use_mock = use_mock_scraping()
 
     if use_mock:
         unique = _get_mock_comparables(search_query)

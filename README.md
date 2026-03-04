@@ -17,11 +17,11 @@ An AI-powered market research platform for campground and glamping investments. 
 | Component | Technology |
 |-----------|------------|
 | Language | Python |
-| LLM | Ollama (llama3, mistral) |
+| LLM | Ollama (local) or OpenAI (cloud) |
 | Agent Framework | LangGraph |
 | Browser | Playwright + Browserbase (optional) |
 | Vector DB | ChromaDB |
-| Embeddings | Ollama (nomic-embed-text) |
+| Embeddings | Ollama or OpenAI |
 | UI | Streamlit |
 | Charts | Plotly |
 
@@ -101,6 +101,19 @@ python run.py
 Open http://localhost:8501 in your browser.
 
 **Quick test without browser:** Set `MOCK_SCRAPING=1` to use sample data instead of live scraping (useful when Playwright isn't installed or for testing).
+
+## Deploy to Streamlit Community Cloud
+
+1. Push your repo to GitHub.
+2. Go to [share.streamlit.io](https://share.streamlit.io) and sign in with GitHub.
+3. Click **New app** → select your repo, branch `main`, and set **Main file path** to `frontend/app.py`.
+4. Click **Deploy**. The app will build and launch.
+5. **API keys**: Use the sidebar **Configure API Keys** to enter:
+   - **OpenAI API Key** (required for AI recommendations on cloud) – get one at [platform.openai.com](https://platform.openai.com)
+   - **Browserbase** (optional) – for live scraping instead of mock data
+   - **Mock scraping** – check this when no Browserbase; uses sample data
+
+On Streamlit Cloud, Ollama is not available. Use your OpenAI key for AI recommendations and document embeddings.
 
 ## Usage
 

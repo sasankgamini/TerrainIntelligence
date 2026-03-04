@@ -1,4 +1,5 @@
 """Streamlit UI for Glamping Market Research AI."""
+import os
 import sys
 from pathlib import Path
 
@@ -46,9 +47,94 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
+def _sync_api_keys_to_env():
+    """Sync session state API keys to os.environ so backend reads them."""
+    mapping = [
+        ("OPENAI_API_KEY", "openai_api_key"),
+        ("BROWSERBASE_API_KEY", "browserbase_api_key"),
+        ("BROWSERBASE_PROJECT_ID", "browserbase_project_id"),
+        ("OLLAMA_BASE_URL", "ollama_base_url"),
+        ("MOCK_SCRAPING", "mock_scraping"),
+    ]
+    for env_key, session_key in mapping:
+        val = st.session_state.get(session_key, "")
+        if env_key == "MOCK_SCRAPING":
+            if val:
+                os.environ[env_key] = "1"
+            else:
+                os.environ.pop(env_key, None)
+        elif val:
+            os.environ[env_key] = str(val)
+        else:
+            os.environ.pop(env_key, None)
+
+
 def main():
     if "last_analysis" not in st.session_state:
         st.session_state.last_analysis = None
+    if "openai_api_key" not in st.session_state:
+        st.session_state.openai_api_key = os.getenv("OPENAI_API_KEY", "")
+    if "browserbase_api_key" not in st.session_state:
+        st.session_state.browserbase_api_key = os.getenv("BROWSERBASE_API_KEY", "")
+    if "browserbase_project_id" not in st.session_state:
+        st.session_state.browserbase_project_id = os.getenv("BROWSERBASE_PROJECT_ID", "")
+    if "ollama_base_url" not in st.session_state:
+        st.session_state.ollama_base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+    if "mock_scraping" not in st.session_state:
+        st.session_state.mock_scraping = "1" if os.getenv("MOCK_SCRAPING", "").lower() in ("1", "true", "yes") else ""
+
+    with st.sidebar:
+        st.subheader("🔑 API Keys & Settings")
+        with st.expander("Configure API Keys", expanded=False):
+            st.caption("Enter your keys below. They are stored in your session only.")
+
+            st.text_input(
+                "OpenAI API Key",
+                type="password",
+                placeholder="sk-...",
+                help="Required for AI recommendations on cloud. Get one at platform.openai.com",
+                key="openai_api_key",
+            )
+
+            st.divider()
+            st.caption("Browserbase (optional – for live scraping instead of mock data)")
+
+            st.text_input(
+                "Browserbase API Key",
+                type="password",
+                placeholder="bb_...",
+                key="browserbase_api_key",
+            )
+
+            st.text_input(
+                "Browserbase Project ID",
+                placeholder="Project ID",
+                key="browserbase_project_id",
+            )
+
+            st.divider()
+            st.caption("Ollama (optional – for local LLM instead of OpenAI)")
+
+            st.text_input(
+                "Ollama Base URL",
+                placeholder="http://localhost:11434",
+                key="ollama_base_url",
+            )
+
+            mock_checked = st.checkbox(
+                "Use mock scraping (no browser)",
+                value=bool(st.session_state.get("mock_scraping")),
+                help="Use sample data instead of live scraping. Enable when no Browserbase.",
+                key="mock_scraping_cb",
+            )
+            st.session_state.mock_scraping = "1" if mock_checked else ""
+
+            if st.button("Save & Apply"):
+                _sync_api_keys_to_env()
+                st.success("Settings applied.")
+
+    # Apply keys before any backend calls
+    _sync_api_keys_to_env()
 
     st.markdown('<p class="main-header">🏕️ Glamping Market Research AI</p>', unsafe_allow_html=True)
     st.markdown("Analyze campground and glamping investment potential with AI-powered market research.")

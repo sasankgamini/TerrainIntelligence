@@ -41,7 +41,9 @@ def scout_properties(scout_input: ScoutInput) -> list[dict]:
     Scrape land listings and rank by estimated ROI.
     Returns list of dicts with property info and estimated metrics.
     """
-    use_mock = os.getenv("MOCK_SCRAPING", "").lower() in ("1", "true", "yes")
+    from config import use_mock_scraping
+
+    use_mock = use_mock_scraping()
     if use_mock:
         return _get_mock_scout_results(scout_input)
 

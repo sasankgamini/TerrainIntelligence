@@ -144,23 +144,44 @@ Based on comparable review activity and market type:
 
 
 def _generate_recommendation(state: AnalysisState) -> str:
-    """Use Ollama for recommendation if available."""
+    """Use LLM (OpenAI or Ollama) for recommendation if available."""
     roi_pct = state.get("roi", 0)
     payback = state.get("payback_period_years", 999)
     npv_val = state.get("npv", 0)
 
-    try:
-        import ollama
-        from config import OLLAMA_BASE_URL, OLLAMA_MODEL
-
-        client = ollama.Client(host=OLLAMA_BASE_URL)
-        prompt = f"""Based on these investment metrics, write a 2-3 sentence investment recommendation:
+    prompt = f"""Based on these investment metrics, write a 2-3 sentence investment recommendation:
 - ROI: {roi_pct}%
 - Payback period: {payback} years
 - NPV: ${npv_val:,.0f}
 
 Be concise and actionable. Mention risk factors if ROI is low or payback is long."""
-        resp = client.generate(model=OLLAMA_MODEL, prompt=prompt)
+
+    # Try OpenAI first (works on cloud deployments)
+    from config import get_openai_api_key
+
+    api_key = get_openai_api_key()
+    if api_key:
+        try:
+            from openai import OpenAI
+
+            client = OpenAI(api_key=api_key)
+            resp = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=200,
+            )
+            if resp.choices and resp.choices[0].message.content:
+                return resp.choices[0].message.content.strip()
+        except Exception:
+            pass
+
+    # Try Ollama (local)
+    try:
+        import ollama
+        from config import get_ollama_base_url, get_ollama_model
+
+        client = ollama.Client(host=get_ollama_base_url())
+        resp = client.generate(model=get_ollama_model(), prompt=prompt)
         if resp and hasattr(resp, "response") and resp.response:
             return resp.response.strip()
     except Exception:

@@ -16,10 +16,10 @@ except ImportError:
 
 def get_browser_manager():
     """Get the appropriate browser manager based on environment."""
-    from config import USE_BROWSERBASE, BROWSERBASE_API_KEY, BROWSERBASE_PROJECT_ID
+    from config import use_browserbase, get_browserbase_api_key, get_browserbase_project_id
 
-    if USE_BROWSERBASE and Browserbase:
-        return BrowserbaseManager(BROWSERBASE_API_KEY, BROWSERBASE_PROJECT_ID)
+    if use_browserbase() and Browserbase:
+        return BrowserbaseManager(get_browserbase_api_key(), get_browserbase_project_id())
     return LocalPlaywrightManager()
 
 
