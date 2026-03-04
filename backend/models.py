@@ -44,6 +44,33 @@ class ScoutInput:
 
 
 @dataclass
+class ResearchPlan:
+    """Research plan created by PlannerAgent."""
+    property_address: str
+    steps: list[dict]  # {"id", "action", "description", "scraper"}
+    current_step_index: int = 0
+    completed_steps: list[str] = field(default_factory=list)
+    websites_to_visit: list[str] = field(default_factory=list)
+
+
+@dataclass
+class VerifiedDataset:
+    """Dataset with verification metadata."""
+    comparables: list
+    confidence_score: float  # 0-1
+    source_count: int
+
+
+@dataclass
+class TourismDemandSignals:
+    """Tourism demand signals from scraped sources."""
+    review_counts: int
+    attractions_nearby: int
+    search_popularity_score: float  # 0-1
+    sources: list[str] = field(default_factory=list)
+
+
+@dataclass
 class AnalysisResult:
     """Complete analysis result."""
     property_input: PropertyInput

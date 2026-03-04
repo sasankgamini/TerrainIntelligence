@@ -5,6 +5,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+# Initialize logging for agent debugging
+try:
+    from backend.logging_config import setup_logging
+    setup_logging()
+except Exception:
+    pass
+
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -137,9 +144,16 @@ def main():
     _sync_api_keys_to_env()
 
     st.markdown('<p class="main-header">🏕️ Glamping Market Research AI</p>', unsafe_allow_html=True)
-    st.markdown("Analyze campground and glamping investment potential with AI-powered market research.")
+    st.markdown("Autonomous AI research platform for campground and glamping investment analysis.")
 
-    tab1, tab2, tab3 = st.tabs(["Market Analysis", "Land Investment Finder", "Export & Cache"])
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+        "Market Analysis",
+        "Land Investment Finder",
+        "Comparables",
+        "Financial Model",
+        "Sources",
+        "Export & Cache",
+    ])
 
     with tab1:
         render_market_analysis_tab()
@@ -148,6 +162,15 @@ def main():
         render_scout_tab()
 
     with tab3:
+        render_comparables_tab()
+
+    with tab4:
+        render_financial_model_tab()
+
+    with tab5:
+        render_sources_tab()
+
+    with tab6:
         render_export_tab()
 
 
@@ -219,7 +242,7 @@ def display_analysis_results(state: dict):
     st.success("Analysis complete!")
 
     # Metrics row
-    c1, c2, c3, c4, c5 = st.columns(5)
+    c1, c2, c3, c4, c5, c6 = st.columns(6)
     with c1:
         st.metric("Recommended Rate", f"${state.get('recommended_nightly_rate', 0):.0f}/night")
     with c2:
@@ -230,6 +253,8 @@ def display_analysis_results(state: dict):
         st.metric("ROI", f"{state.get('roi', 0):.1f}%")
     with c5:
         st.metric("Payback", f"{state.get('payback_period_years', 0):.1f} yrs")
+    with c6:
+        st.metric("Investment Score", f"{state.get('investment_score', 0):.0f}/100")
 
     # Map and charts
     col_left, col_right = st.columns([1, 1])
@@ -255,7 +280,7 @@ def display_analysis_results(state: dict):
         else:
             st.info("No comparables to display.")
 
-        st.subheader("Pricing Distribution")
+        st.subheader("Price Distribution Histogram")
         if comparables:
             prices = [c.price_per_night for c in comparables if c.price_per_night > 0]
             if prices:
@@ -276,12 +301,13 @@ def display_analysis_results(state: dict):
                 fig = go.Figure(data=[go.Pie(labels=list(items.keys()), values=list(items.values()))])
                 st.plotly_chart(fig, use_container_width=True)
 
-        st.subheader("10-Year Revenue Projection")
+        st.subheader("10-Year Revenue Chart")
         proj = state.get("revenue_projection_10yr", [])
         if proj:
             df_proj = pd.DataFrame(proj)
             fig = px.line(df_proj, x="year", y="revenue", title="Revenue Over Time")
             fig.add_scatter(x=df_proj["year"], y=df_proj["expenses"], name="Expenses", mode="lines")
+            fig.add_scatter(x=df_proj["year"], y=df_proj["noi"], name="NOI", mode="lines")
             st.plotly_chart(fig, use_container_width=True)
 
     st.subheader("Investment Recommendation")
@@ -333,6 +359,140 @@ def display_analysis_results(state: dict):
             st.info("PDF export: install reportlab. " + str(e))
 
 
+def render_comparables_tab():
+    """Comparables tab: map, price distribution, top similar listings."""
+    if "last_analysis" not in st.session_state or not st.session_state.last_analysis:
+        st.info("Run a Market Analysis first to see comparables.")
+        return
+    state = st.session_state.last_analysis
+    comparables = state.get("comparables", [])
+    top_comparables = state.get("top_comparables", [])
+
+    st.subheader("Comparable Listings")
+    if comparables:
+        score_map = {c.name: f"{s*100:.0f}%" for c, s in top_comparables} if top_comparables else {}
+        df = pd.DataFrame([
+            {
+                "Name": c.name,
+                "Price/night": f"${c.price_per_night:.0f}" if c.price_per_night else "N/A",
+                "Location": c.location,
+                "Rating": c.rating or "-",
+                "Reviews": c.reviews or "-",
+                "Source": c.source,
+                "Similarity": score_map.get(c.name, "-"),
+            }
+            for c in comparables[:30]
+        ])
+        st.dataframe(df, use_container_width=True)
+
+        st.subheader("Map of Comparables")
+        map_df = pd.DataFrame([
+            {"lat": 35.5, "lon": -82.5, "name": c.name, "price": c.price_per_night}
+            for c in comparables[:20] if c.price_per_night > 0
+        ])
+        if not map_df.empty:
+            st.map(map_df, latitude="lat", longitude="lon")
+
+        st.subheader("Price Distribution Histogram")
+        prices = [c.price_per_night for c in comparables if c.price_per_night > 0]
+        if prices:
+            fig = px.histogram(x=prices, nbins=15, title="Comparable Pricing Distribution")
+            fig.update_layout(xaxis_title="Price ($)", yaxis_title="Count")
+            st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.info("No comparables in last analysis.")
+
+
+def render_financial_model_tab():
+    """Financial Model tab: scenarios, occupancy curve, ROI timeline."""
+    if "last_analysis" not in st.session_state or not st.session_state.last_analysis:
+        st.info("Run a Market Analysis first to see financial model.")
+        return
+    state = st.session_state.last_analysis
+    scenarios = state.get("financial_scenarios", {})
+    proj = state.get("revenue_projection_10yr", [])
+    capacity = state.get("capacity_estimate")
+
+    st.subheader("Financial Scenarios")
+    if scenarios:
+        rows = []
+        for name, data in [("Base", scenarios.get("base_case")), ("Optimistic", scenarios.get("optimistic_case")), ("Conservative", scenarios.get("conservative_case"))]:
+            if data:
+                rows.append({
+                    "Scenario": name,
+                    "ROI": f"{data.get('roi', 0):.1f}%",
+                    "NPV": f"${data.get('npv', 0):,.0f}",
+                    "IRR": f"{data.get('irr', 0):.1f}%",
+                    "Payback (yrs)": data.get("payback_years", 0),
+                })
+        if rows:
+            st.dataframe(pd.DataFrame(rows), use_container_width=True)
+
+    st.subheader("10-Year Revenue Chart")
+    if proj:
+        df_proj = pd.DataFrame(proj)
+        fig = px.line(df_proj, x="year", y="revenue", title="10-Year Revenue Projection")
+        fig.add_scatter(x=df_proj["year"], y=df_proj["expenses"], name="Expenses", mode="lines")
+        fig.add_scatter(x=df_proj["year"], y=df_proj["noi"], name="NOI", mode="lines")
+        st.plotly_chart(fig, use_container_width=True)
+
+    st.subheader("ROI Timeline")
+    if proj:
+        df_proj = pd.DataFrame(proj)
+        cum_noi = df_proj["noi"].cumsum()
+        fig = px.line(x=df_proj["year"], y=cum_noi, title="Cumulative NOI Over 10 Years")
+        fig.update_layout(xaxis_title="Year", yaxis_title="Cumulative NOI ($)")
+        st.plotly_chart(fig, use_container_width=True)
+
+    if capacity:
+        st.subheader("Development Capacity Estimate")
+        st.markdown(f"**Max units**: {capacity.total_units} (Cabins: {capacity.max_cabins}, Glamping: {capacity.max_glamping}, RV: {capacity.max_rv_sites}, Tent: {capacity.max_tent_sites})")
+        st.markdown(f"**Permitting risk**: {capacity.permitting_risk}")
+
+    st.subheader("Occupancy Curve (Seasonal)")
+    occ_curve = state.get("occupancy_curve", [])
+    if occ_curve:
+        months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+        fig = px.line(x=months, y=[v*100 for v in occ_curve], title="Monthly Occupancy (Jan-Dec)")
+        fig.update_layout(xaxis_title="Month", yaxis_title="Occupancy %")
+        st.plotly_chart(fig, use_container_width=True)
+
+
+def render_sources_tab():
+    """Sources tab: research log, scraped sources, citations."""
+    if "last_analysis" not in st.session_state or not st.session_state.last_analysis:
+        st.info("Run a Market Analysis first to see sources.")
+        return
+    state = st.session_state.last_analysis
+    research_log = state.get("research_log", [])
+    comparables = state.get("comparables", [])
+    verified = state.get("verified_dataset")
+
+    st.subheader("Research Log")
+    if research_log:
+        for entry in research_log:
+            st.text(f"{entry.get('agent', '?')} | {entry.get('action', '?')} | {entry.get('message', entry)}")
+    else:
+        st.info("No research log (legacy mode).")
+
+    st.subheader("Scraped Sources")
+    if comparables:
+        sources = {}
+        for c in comparables:
+            s = c.source or "unknown"
+            sources[s] = sources.get(s, 0) + 1
+        for src, count in sorted(sources.items(), key=lambda x: -x[1]):
+            st.markdown(f"- **{src}**: {count} listings")
+    if verified:
+        st.markdown(f"**Confidence score**: {verified.confidence_score:.0%} | **Source count**: {verified.source_count}")
+
+    st.subheader("Source Citations")
+    if comparables:
+        for c in comparables[:15]:
+            price = f"${c.price_per_night:.0f}/night" if c.price_per_night else "N/A"
+            st.markdown(f"- [{c.name}]({c.source_url}) – {price} – *{c.source}*")
+
+
 def render_scout_tab():
     st.subheader("Land Investment Finder")
     st.markdown("Find properties with high glamping ROI potential.")
@@ -365,9 +525,10 @@ def render_scout_tab():
                 if results:
                     df = pd.DataFrame(results)
                     st.dataframe(df, use_container_width=True)
+                    st.caption("Ranked by Investment Score (ROI + demand + capacity + risk)")
                     st.subheader("Properties Map")
                     map_df = pd.DataFrame([
-                        {"lat": 35.5, "lon": -82.5, "name": r["name"], "est_roi": r["est_roi"]}
+                        {"lat": 35.5, "lon": -82.5, "name": r["name"], "investment_score": r.get("investment_score", r["est_roi"])}
                         for r in results[:10]
                     ])
                     st.map(map_df, latitude="lat", longitude="lon")

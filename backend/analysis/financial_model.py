@@ -100,21 +100,34 @@ def irr(cash_flows: list[float], guess: float = 0.1) -> float:
     return round(max(0, rate) * 100, 2)
 
 
+# US camping seasonal factors (Jan-Dec): peak summer
+SEASONAL_MONTHLY_FACTORS = [0.6, 0.55, 0.7, 0.85, 1.0, 1.1, 1.15, 1.1, 0.95, 0.8, 0.65, 0.6]
+
+# Inflation assumption (annual)
+DEFAULT_INFLATION_RATE = 0.03
+
+
+def seasonal_occupancy_curve(base_occupancy: float) -> list[float]:
+    """Monthly occupancy factors (Jan-Dec). Peak in summer."""
+    return [base_occupancy * f for f in SEASONAL_MONTHLY_FACTORS]
+
+
 def ten_year_projection(
     units: int,
     nightly_price: float,
     occupancy_rate: float,
     expenses: dict,
     growth_rate: float = 0.02,
+    inflation_rate: float = DEFAULT_INFLATION_RATE,
 ) -> list[dict]:
-    """Generate 10-year revenue/expense projection."""
+    """Generate 10-year revenue/expense projection with inflation."""
     projection = []
     rev = annual_revenue(units, nightly_price, occupancy_rate)
     exp_total = expenses["total"]
 
     for year in range(1, 11):
-        rev = rev * (1 + growth_rate)
-        exp_total = exp_total * (1 + growth_rate * 0.8)  # Expenses grow slower
+        rev = rev * (1 + growth_rate) * (1 + inflation_rate * 0.5)  # Revenue grows + inflation
+        exp_total = exp_total * (1 + growth_rate * 0.8) * (1 + inflation_rate)  # Expenses track inflation
         noi_val = rev - exp_total
         projection.append({
             "year": year,
@@ -123,3 +136,72 @@ def ten_year_projection(
             "noi": round(noi_val, 2),
         })
     return projection
+
+
+def financial_scenarios(
+    units: int,
+    nightly_price: float,
+    base_occupancy: float,
+    expenses: dict,
+    investment: float,
+) -> dict:
+    """
+    Generate base, optimistic, and conservative financial scenarios.
+    Returns dict with base_case, optimistic_case, conservative_case.
+    """
+    # Base case
+    base_rev = annual_revenue(units, nightly_price, base_occupancy)
+    base_noi = noi(base_rev, expenses)
+    base_proj = ten_year_projection(units, nightly_price, base_occupancy, expenses, growth_rate=0.02)
+    base_cf = [-investment] + [p["noi"] for p in base_proj]
+
+    # Optimistic: +15% occupancy, +5% price, 3% growth
+    opt_occ = min(0.75, base_occupancy * 1.15)
+    opt_price = nightly_price * 1.05
+    opt_rev = annual_revenue(units, opt_price, opt_occ)
+    opt_exp = {**expenses, "total": expenses["total"] * 1.05}
+    opt_noi = noi(opt_rev, opt_exp)
+    opt_proj = ten_year_projection(units, opt_price, opt_occ, opt_exp, growth_rate=0.03)
+    opt_cf = [-investment] + [p["noi"] for p in opt_proj]
+
+    # Conservative: -15% occupancy, -5% price, 1% growth
+    cons_occ = max(0.25, base_occupancy * 0.85)
+    cons_price = nightly_price * 0.95
+    cons_rev = annual_revenue(units, cons_price, cons_occ)
+    cons_exp = {**expenses, "total": expenses["total"] * 0.95}
+    cons_noi = noi(cons_rev, cons_exp)
+    cons_proj = ten_year_projection(units, cons_price, cons_occ, cons_exp, growth_rate=0.01)
+    cons_cf = [-investment] + [p["noi"] for p in cons_proj]
+
+    return {
+        "base_case": {
+            "annual_revenue": base_rev,
+            "noi": base_noi,
+            "roi": roi(investment, base_noi),
+            "npv": npv(base_cf),
+            "irr": irr(base_cf),
+            "payback_years": payback_period(investment, base_noi),
+            "projection": base_proj,
+            "cash_flows": base_cf,
+        },
+        "optimistic_case": {
+            "annual_revenue": opt_rev,
+            "noi": opt_noi,
+            "roi": roi(investment, opt_noi),
+            "npv": npv(opt_cf),
+            "irr": irr(opt_cf),
+            "payback_years": payback_period(investment, opt_noi),
+            "projection": opt_proj,
+            "cash_flows": opt_cf,
+        },
+        "conservative_case": {
+            "annual_revenue": cons_rev,
+            "noi": cons_noi,
+            "roi": roi(investment, cons_noi),
+            "npv": npv(cons_cf),
+            "irr": irr(cons_cf),
+            "payback_years": payback_period(investment, cons_noi),
+            "projection": cons_proj,
+            "cash_flows": cons_cf,
+        },
+    }

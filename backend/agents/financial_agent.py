@@ -14,7 +14,9 @@ from backend.analysis.financial_model import (
     npv,
     irr,
     ten_year_projection,
+    financial_scenarios,
 )
+from backend.analysis.capacity_estimation import estimate_capacity
 
 
 def financial_agent(state: AnalysisState) -> AnalysisState:
@@ -44,7 +46,10 @@ def financial_agent(state: AnalysisState) -> AnalysisState:
     npv_val = npv(cash_flows)
     irr_val = irr(cash_flows)
 
-    return {
+    scenarios = financial_scenarios(units, rate, occ, expenses, investment)
+    capacity_estimate = estimate_capacity(prop.acreage, state.get("doc_context", ""))
+
+    state_with_metrics = {
         **state,
         "net_operating_income": noi_val,
         "roi": roi_pct,
@@ -52,4 +57,16 @@ def financial_agent(state: AnalysisState) -> AnalysisState:
         "npv": npv_val,
         "irr": irr_val,
         "revenue_projection_10yr": projection,
+        "financial_scenarios": scenarios,
+        "capacity_estimate": capacity_estimate,
     }
+    roi_weight = min(1.0, roi_pct / 15) * 0.35
+    tourism = state.get("tourism_signals")
+    demand_weight = (tourism.search_popularity_score if tourism else 0.5) * 0.25
+    comp_count = len(state.get("comparables", []))
+    competition_weight = min(1.0, comp_count / 20) * 0.2
+    tourism_weight = (tourism.search_popularity_score if tourism else 0.5) * 0.2
+    state_with_metrics["investment_score"] = round(
+        (roi_weight + demand_weight + (1 - competition_weight * 0.5) + tourism_weight) * 100, 1
+    )
+    return state_with_metrics

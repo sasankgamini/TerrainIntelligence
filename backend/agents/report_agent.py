@@ -8,11 +8,15 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from backend.agents.state import AnalysisState
 
 
-def _format_comparables(comparables: list) -> str:
+def _format_comparables(comparables: list, with_citations: bool = True) -> str:
+    """Format comparables with automated source citations: [Name] – price – source URL."""
     lines = []
     for c in comparables[:20]:
         price = f"${c.price_per_night:.0f}/night" if c.price_per_night else "N/A"
-        lines.append(f"- **{c.name}** ({c.source}): {price} | [Link]({c.source_url})")
+        if with_citations and c.source_url:
+            lines.append(f"- [{c.name}]({c.source_url}) – {price} – *{c.source}*")
+        else:
+            lines.append(f"- **{c.name}** ({c.source}): {price} | [Link]({c.source_url})")
     return "\n".join(lines) if lines else "No comparables found."
 
 
@@ -23,6 +27,16 @@ def _format_expenses(exp: dict) -> str:
             lines.append(f"- {k.replace('_', ' ').title()}: ${v:,.0f}")
     lines.append(f"- **Total**: ${exp.get('total', 0):,.0f}")
     return "\n".join(lines)
+
+
+def _format_pricing_distribution(comparables: list) -> str:
+    """Summarize comparable pricing distribution."""
+    prices = [c.price_per_night for c in comparables if c.price_per_night and c.price_per_night > 0]
+    if not prices:
+        return "Insufficient price data."
+    import numpy as np
+    p25, p50, p75 = np.percentile(prices, [25, 50, 75])
+    return f"25th: ${p25:.0f} | Median: ${p50:.0f} | 75th: ${p75:.0f}"
 
 
 def report_agent(state: AnalysisState) -> AnalysisState:
@@ -40,6 +54,11 @@ def report_agent(state: AnalysisState) -> AnalysisState:
     irr_val = state.get("irr", 0)
     projection = state.get("revenue_projection_10yr", [])
     doc_context = state.get("doc_context", "")
+    tourism = state.get("tourism_signals")
+    verified = state.get("verified_dataset")
+    scenarios = state.get("financial_scenarios", {})
+    capacity = state.get("capacity_estimate")
+    investment_score = state.get("investment_score", 0)
 
     units = (
         prop.number_of_cabins
@@ -48,7 +67,6 @@ def report_agent(state: AnalysisState) -> AnalysisState:
         + prop.number_of_tent_sites
     )
 
-    # Generate recommendation with LLM if available
     recommendation = _generate_recommendation(state)
 
     md = f"""# Glamping Investment Report
@@ -78,7 +96,37 @@ def report_agent(state: AnalysisState) -> AnalysisState:
 
 ---
 
-## 3. Pricing Analysis
+## 3. Comparable Pricing Distribution
+
+{_format_pricing_distribution(comparables)}
+
+---
+
+## 4. Tourism Demand Analysis
+
+{f"- **Review counts**: {tourism.review_counts} across comparables" if tourism else "- No tourism data"}
+{f"- **Attractions nearby**: {tourism.attractions_nearby} (estimated)" if tourism else ""}
+{f"- **Search popularity**: {tourism.search_popularity_score:.0%}" if tourism else ""}
+{f"- **Sources**: {', '.join(tourism.sources)}" if tourism and tourism.sources else ""}
+{f"These signals support an occupancy estimate of {occ*100:.1f}%." if tourism else ""}
+
+---
+
+## 5. Market Competition
+
+{f"**{len(comparables)}** comparable listings found across **{verified.source_count}** sources. Confidence: {verified.confidence_score:.0%}." if verified else f"**{len(comparables)}** comparable listings found."}
+
+---
+
+## 6. Development Capacity Estimate
+
+{f"**Max capacity**: {capacity.total_units} units (Cabins: {capacity.max_cabins}, Glamping: {capacity.max_glamping}, RV: {capacity.max_rv_sites}, Tent: {capacity.max_tent_sites})" if capacity else ""}
+{f"**Permitting risk**: {capacity.permitting_risk}" if capacity else ""}
+{f"**Note**: {capacity.zoning_constraint}" if capacity and capacity.zoning_constraint else ""}
+
+---
+
+## 7. Pricing Analysis
 
 | Metric | Value |
 |--------|-------|
@@ -87,15 +135,7 @@ def report_agent(state: AnalysisState) -> AnalysisState:
 
 ---
 
-## 4. Occupancy Estimates
-
-Based on comparable review activity and market type:
-- **Estimated occupancy**: {occ*100:.1f}%
-- Typical ranges: Tourism 55-70%, Rural 35-50%
-
----
-
-## 5. Revenue Forecast
+## 8. Revenue Forecast
 
 | Metric | Value |
 |--------|-------|
@@ -113,13 +153,26 @@ Based on comparable review activity and market type:
     md += f"""
 ---
 
-## 6. Expense Breakdown
+## 9. Expense Breakdown
 
 {_format_expenses(exp)}
 
 ---
 
-## 7. ROI Analysis
+## 10. Financial Scenarios
+
+| Scenario | ROI | NPV | IRR | Payback |
+|----------|-----|-----|-----|---------|
+"""
+    if scenarios:
+        for name, data in [("Base", scenarios.get("base_case", {})), ("Optimistic", scenarios.get("optimistic_case", {})), ("Conservative", scenarios.get("conservative_case", {}))]:
+            if data:
+                md += f"| {name} | {data.get('roi', 0):.1f}% | ${data.get('npv', 0):,.0f} | {data.get('irr', 0):.1f}% | {data.get('payback_years', 0):.1f} yrs |\n"
+
+    md += f"""
+---
+
+## 11. ROI Analysis
 
 | Metric | Value |
 |--------|-------|
@@ -128,10 +181,19 @@ Based on comparable review activity and market type:
 | Payback Period | {payback:.1f} years |
 | NPV (8% discount) | ${npv_val:,.0f} |
 | IRR | {irr_val}% |
+| **Investment Score** | {investment_score}/100 |
 
 ---
 
-## 8. Investment Recommendation
+## 12. Investment Risk Assessment
+
+- **Capacity risk**: {capacity.permitting_risk if capacity else "Unknown"} permitting risk
+- **Market risk**: Based on {len(comparables)} comparables
+- **Scenario spread**: See Base/Optimistic/Conservative above
+
+---
+
+## 13. Investment Recommendation
 
 {recommendation}
 
