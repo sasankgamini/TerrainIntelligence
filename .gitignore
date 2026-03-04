@@ -10,3 +10,6 @@ data/cache/*
 data/chroma_db/
 *.db
 .DS_Store
+
+# Session recordings (may contain secrets)
+demo/session_recording.json
