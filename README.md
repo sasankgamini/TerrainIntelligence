@@ -4,6 +4,23 @@ An AI-powered market research platform for campground and glamping investments.
 
 **[→ Try the live app](https://terrainintelligence.streamlit.app/)** Analyzes property addresses, scrapes comparable listings, estimates pricing and occupancy, and generates full investment reports—all running locally with free tools.
 
+## Demo
+
+A **Browserbase session recording** shows the Research agent scraping Airbnb, Hipcamp, and other sites during a market analysis run.
+
+**View locally:**
+
+```bash
+# 1. Export the recording (requires BROWSERBASE_API_KEY in .env)
+python scripts/fetch_session_recording.py
+
+# 2. Serve the demo folder and open in a browser
+cd demo && python -m http.server 8080
+# Open http://localhost:8080/replay.html
+```
+
+**Or** view directly in the [Browserbase Dashboard](https://browserbase.com/sessions/81f0c1ba-c7fa-4c36-be58-d8efc37cbfc8) (requires a Browserbase account).
+
 ## Features
 
 - **Property Analysis**: Analyze any address for glamping/campground investment potential
@@ -213,6 +230,8 @@ Both the **Research** and **Property Scout** agents need a browser to scrape sit
 
 ```
 TerrainIntelligence/
+├── demo/               # Session recording replay (replay.html + session_recording.json)
+├── scripts/           # Utilities (e.g. fetch_session_recording.py)
 ├── backend/
 │   ├── agents/          # LangGraph agents
 │   ├── scrapers/        # Playwright + BeautifulSoup scrapers

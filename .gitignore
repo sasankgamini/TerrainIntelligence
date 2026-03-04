@@ -11,5 +11,5 @@ data/chroma_db/
 *.db
 .DS_Store
 
-# Session recordings (may contain secrets)
+# Session recordings (contain tokens from scraped sites; run scripts/fetch_session_recording.py to generate locally)
 demo/session_recording.json

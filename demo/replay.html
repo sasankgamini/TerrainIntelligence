@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TerrainIntelligence - Session Recording Demo</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/rrweb-player@1.0.0-alpha.4/dist/style.css" />
+  <style>
+    body { margin: 0; padding: 20px; font-family: system-ui, sans-serif; background: #0f172a; color: #e2e8f0; }
+    h1 { font-size: 1.25rem; margin-bottom: 0.5rem; }
+    p { color: #94a3b8; font-size: 0.875rem; margin-bottom: 1rem; }
+    #player-container { margin-top: 1rem; }
+  </style>
+</head>
+<body>
+  <h1>Glamping Market Research AI – Session Demo</h1>
+  <p>Browserbase session recording replay. Shows the Research agent scraping Airbnb, Hipcamp, and other sites during a market analysis run.</p>
+  <div id="player-container"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/rrweb-player@1.0.0-alpha.4/dist/index.js"></script>
+  <script>
+    (async function() {
+      const container = document.getElementById('player-container');
+      try {
+        const res = await fetch('session_recording.json');
+        if (!res.ok) throw new Error('Failed to load recording. Serve this folder via HTTP (e.g. python -m http.server 8080 -d demo).');
+        const events = await res.json();
+        new rrwebPlayer({
+          target: container,
+          props: {
+            events,
+            width: 1024,
+            height: 576,
+            autoPlay: false,
+            showController: true,
+            skipInactive: true,
+          },
+        });
+      } catch (e) {
+        container.innerHTML = '<p style="color:#f87171">' + e.message + '</p>' +
+          '<p>Run: <code>python scripts/fetch_session_recording.py</code> to export a recording, then serve this folder with a local server.</p>';
+      }
+    })();
+  </script>
+</body>
+</html>
