@@ -1,6 +1,8 @@
 # Glamping Market Research AI
 
-An AI-powered market research platform for campground and glamping investments. Analyzes property addresses, scrapes comparable listings, estimates pricing and occupancy, and generates full investment reports—all running locally with free tools.
+An AI-powered market research platform for campground and glamping investments.
+
+**[→ Try the live app](https://terrainintelligence.streamlit.app/)** Analyzes property addresses, scrapes comparable listings, estimates pricing and occupancy, and generates full investment reports—all running locally with free tools.
 
 ## Features
 
@@ -103,6 +105,8 @@ Open http://localhost:8501 in your browser.
 **Quick test without browser:** Set `MOCK_SCRAPING=1` to use sample data instead of live scraping (useful when Playwright isn't installed or for testing).
 
 ## Deploy to Streamlit Community Cloud
+
+**Live app:** [terrainintelligence.streamlit.app](https://terrainintelligence.streamlit.app/)
 
 1. Push your repo to GitHub.
 2. Go to [share.streamlit.io](https://share.streamlit.io) and sign in with GitHub.
