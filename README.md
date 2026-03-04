@@ -1,6 +1,6 @@
 # Glamping Market Research AI
 
-An AI-powered market research platform for campground and glamping investments.
+An **autonomous AI research platform** for campground and glamping investments—similar to OpenAI Deep Research. Performs multi-step research, plans its own browsing actions, gathers and verifies sources, and iteratively improves results.
 
 **[→ Try the live app](https://terrainintelligence.streamlit.app/)** Analyzes property addresses, scrapes comparable listings, estimates pricing and occupancy, and generates full investment reports—all running locally with free tools.
 
@@ -23,13 +23,17 @@ cd demo && python -m http.server 8080
 
 ## Features
 
+- **Autonomous Research Loop**: Planner → Browser → Verifier agents iterate until sufficient data or limit reached
 - **Property Analysis**: Analyze any address for glamping/campground investment potential
 - **Multi-Source Scraping**: Airbnb, Hipcamp, GlampingHub, Google Maps, Zillow, Redfin
-- **Pricing & Occupancy Models**: AI-estimated nightly rates and occupancy
-- **Financial Projections**: ROI, NPV, IRR, 10-year revenue forecast
-- **RAG Document Context**: Upload zoning docs, reports—agents use them as context
-- **Land Investment Finder**: Scout properties by county/state, ranked by ROI potential
-- **Export**: Markdown and PDF reports
+- **Comparable Filtering**: Weighted similarity scoring (distance, unit type, amenities, rating, price); top 20 most similar
+- **Tourism Demand Signals**: Review counts, attractions nearby, search popularity—adjusts occupancy estimates
+- **Capacity Estimation**: Acreage-based unit limits (cabins 2–5/acre, glamping 4–8/acre, RV 6–10/acre, tent 8–15/acre); zoning from docs
+- **Financial Scenarios**: Base, optimistic, and conservative cases with IRR, NPV, 10-year cash flow
+- **Investment Score**: ROI + demand + competition + tourism weighted ranking
+- **RAG Document Context**: Upload zoning docs—influences capacity, permitting risk, feasibility
+- **Land Investment Finder**: Scout properties; runs full capacity + financial model; ranks by investment score
+- **Export**: Markdown and PDF reports with automated source citations
 
 ## Tech Stack
 
@@ -143,47 +147,67 @@ On Streamlit Cloud, Ollama is not available. Use your OpenAI key for AI recommen
 1. Enter property address, acreage, and unit counts (cabins, glamping, RV, tent sites)
 2. Optionally upload PDF/DOCX/XLSX files (zoning, reports)
 3. Click **Run Market Analysis**
-4. View comparables map, pricing distribution, expense breakdown, ROI timeline
+4. View comparables map, price distribution, occupancy curve, financial scenarios, ROI timeline
 5. Download report as Markdown or PDF
 
 ### Land Investment Finder Tab
 
 1. Enter county, state, budget range, minimum acreage
 2. Click **Find Properties**
-3. Results are ranked by estimated ROI
+3. Results are ranked by **investment score** (ROI + demand + capacity + risk)
 4. View table and map
+
+### Other Tabs
+
+- **Comparables**: Top similar listings, map, price distribution histogram
+- **Financial Model**: Base/optimistic/conservative scenarios, 10-year chart, ROI timeline, capacity estimate
+- **Sources**: Research log, scraped sources, automated citations
+- **Export & Cache**: CSV export of comparables
 
 ## Workflow: Agents, LLMs & Browserbase
 
-### Agent Pipeline (LangGraph)
+### Autonomous Research Loop (LangGraph)
 
-The **Market Analysis** flow runs a linear LangGraph pipeline with 6 agents:
+The **Market Analysis** flow uses an autonomous research loop that iterates until sufficient listings or max iterations:
 
 ```
-┌─────────────┐    ┌───────────┐    ┌────────────┐    ┌──────────┐    ┌───────────┐    ┌────────┐
-│  Research   │───▶│  Pricing  │───▶│ Occupancy  │───▶│ Expense  │───▶│ Financial │───▶│ Report │
-│   Agent     │    │   Agent   │    │   Agent    │    │  Agent   │    │   Agent   │    │ Agent  │
-└─────────────┘    └───────────┘    └────────────┘    └──────────┘    └───────────┘    └────────┘
-       │                  │                │                │                │               │
-       ▼                  ▼                ▼                ▼                ▼               ▼
-  Scrapes           Computes          Estimates         Estimates        ROI, NPV,      LLM writes
-  comparables       nightly rate      occupancy %       expenses         IRR, 10yr      recommendation
+  RESEARCH LOOP (Planner → Browser → Verifier, repeat until ≥15 listings or 3 iterations)
+  ┌──────────┐     ┌───────────┐     ┌──────────┐
+  │ Planner  │────▶│  Browser  │────▶│ Verifier │────┐
+  └──────────┘     └───────────┘     └──────────┘    │
+        ▲                 │                 │         │  done? ──▶ continue
+        └─────────────────┴─────────────────┘         │
+                                                      ▼
+  DOWNSTREAM PIPELINE
+  ┌───────────┐   ┌──────────┐   ┌────────┐   ┌───────────┐   ┌────────┐
+  │  Pricing  │──▶│ Occupancy │──▶│ Expense │──▶│ Financial │──▶│ Report │
+  └───────────┘   └──────────┘   └────────┘   └───────────┘   └────────┘
+        │                │             │              │              │
+        ▼                ▼             ▼              ▼              ▼
+  Top 20 similar   Tourism + occ %  Operating    ROI, NPV, IRR   LLM writes
+  comparables      seasonal curve  expenses    Scenarios       recommendation
 ```
 
 | Agent | Role | Uses LLM? |
 |-------|------|------------|
-| **Research** | Scrapes comparable listings from Airbnb, Hipcamp, GlampingHub, Google Maps, Zillow, Redfin | No |
-| **Pricing** | Computes recommended nightly rate from comparables | No |
-| **Occupancy** | Estimates occupancy % from market signals | No |
-| **Expense** | Estimates operating expenses (cleaning, taxes, insurance, etc.) | No |
-| **Financial** | Computes ROI, NPV, IRR, payback period, 10-year projection | No |
-| **Report** | Assembles full Markdown report and generates investment recommendation | **Yes** (Ollama) |
+| **Planner** | Breaks research into tasks; decides which scrapers; creates research plan | No |
+| **Browser** | Controls Playwright/Browserbase; runs scrapers; multi-step browsing | No |
+| **Verifier** | Removes duplicates; cross-checks pricing; computes confidence_score, source_count | No |
+| **Pricing** | Selects top 20 similar comparables; recommends nightly rate | No |
+| **Occupancy** | Estimates occupancy %; gathers tourism demand signals; seasonal curve | No |
+| **Expense** | Estimates operating expenses | No |
+| **Financial** | ROI, NPV, IRR; base/optimistic/conservative scenarios; capacity estimate; investment score | No |
+| **Report** | Full report with Tourism Demand, Capacity, Scenarios, Risk; source citations | **Yes** (Ollama) |
 
 The **Land Investment Finder** uses a separate agent:
 
 | Agent | Role | Uses LLM? |
 |-------|------|------------|
-| **Property Scout** | Scrapes LandWatch, Zillow, Redfin for land listings; ranks by estimated ROI | No |
+| **Property Scout** | Scrapes LandWatch, Zillow, Redfin; runs capacity + financial model; ranks by investment score | No |
+
+### Legacy Mode
+
+To use the original single-step research agent: `run_analysis(prop_input, doc_context, use_autonomous_research=False)`
 
 ### LLMs
 
@@ -194,7 +218,7 @@ The **Land Investment Finder** uses a separate agent:
 
 ### Browserbase vs Local Playwright
 
-Both the **Research** and **Property Scout** agents need a browser to scrape sites. The app chooses the browser backend at runtime:
+The **Browser** agent (and **Property Scout**) need a browser to scrape sites. The app chooses the browser backend at runtime:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -220,31 +244,34 @@ Both the **Research** and **Property Scout** agents need a browser to scrape sit
 ### End-to-End Flow
 
 1. **User** enters property address, unit counts, optionally uploads docs → Streamlit frontend.
-2. **RAG** (if docs uploaded): `nomic-embed-text` embeds files → ChromaDB stores vectors → retriever fetches relevant chunks → `doc_context` passed into pipeline.
-3. **Research agent** gets a page from `get_browser_manager()` → runs 6 scrapers (Airbnb, Hipcamp, etc.) → outputs `comparables`.
-4. **Pricing → Occupancy → Expense → Financial** agents run deterministic models on the state.
-5. **Report agent** builds Markdown report and calls Ollama (`llama3.2`) for the investment recommendation.
-6. **User** sees report, map, charts; can export Markdown/PDF.
+2. **RAG** (if docs uploaded): `nomic-embed-text` embeds files → ChromaDB stores vectors → retriever fetches relevant chunks → `doc_context` passed into pipeline (influences capacity, permitting risk).
+3. **Planner agent** creates research plan (Airbnb, Hipcamp, GlampingHub, Google Maps, Zillow, Redfin, tourism).
+4. **Browser agent** runs scrapers; **Verifier agent** deduplicates, cross-checks, computes confidence. Loop until ≥15 listings or 3 iterations.
+5. **Pricing** selects top 20 similar comparables; **Occupancy** uses tourism signals; **Expense** and **Financial** run models.
+6. **Report agent** builds Markdown report and calls Ollama (`llama3.2`) for the investment recommendation.
+7. **User** sees report, map, charts, financial scenarios; can export Markdown/PDF.
 
 ## Project Structure
 
 ```
 TerrainIntelligence/
 ├── demo/               # Session recording replay (replay.html + session_recording.json)
-├── scripts/           # Utilities (e.g. fetch_session_recording.py)
+├── scripts/            # Utilities (e.g. fetch_session_recording.py)
 ├── backend/
-│   ├── agents/          # LangGraph agents
-│   ├── scrapers/        # Playwright + BeautifulSoup scrapers
-│   ├── analysis/        # Pricing, occupancy, financial models
-│   ├── rag/             # Document loader, ChromaDB, retriever
-│   └── browser/         # Browserbase / local Playwright manager
+│   ├── agents/         # LangGraph agents (planner, browser, verifier, pricing, occupancy, etc.)
+│   ├── scrapers/       # Playwright + BeautifulSoup scrapers
+│   ├── analysis/       # Pricing, occupancy, financial models, comparable_filter, capacity_estimation, tourism_demand
+│   ├── rag/            # Document loader, ChromaDB, retriever
+│   ├── browser/        # Browserbase / local Playwright manager
+│   └── logging_config.py  # Agent/research logging to data/research.log
 ├── frontend/
-│   └── app.py           # Streamlit UI
+│   └── app.py          # Streamlit UI (6 tabs)
 ├── data/
-│   ├── cache/           # Cached scrape results
+│   ├── cache/          # Cached scrape results
 │   ├── comparables/
 │   ├── reports/
-│   └── chroma_db/       # Vector store
+│   ├── chroma_db/      # Vector store
+│   └── research.log    # Agent decisions and research steps
 ├── config.py
 ├── requirements.txt
 └── run.py
@@ -255,6 +282,7 @@ TerrainIntelligence/
 - **Caching**: Scraped results are cached in `data/cache/` to avoid repeated requests
 - **Mock Data**: If a scraper fails (rate limits, structure changes), mock/sample data is returned so the pipeline continues
 - **Browserbase**: Use Browserbase for more reliable scraping; local Playwright works but may hit anti-bot measures
+- **Logging**: Agent decisions and research steps are logged to `data/research.log` for debugging
 
 ## Limitations
 
